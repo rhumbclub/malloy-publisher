@@ -20,7 +20,11 @@ function EnvironmentPage() {
    } else {
       const resourceUri = encodeResourceUri({ environmentName });
       return (
-         <Environment onSelectPackage={navigate} resourceUri={resourceUri} />
+         <Environment
+            onSelectPackage={navigate}
+            resourceUri={resourceUri}
+            packageLinks={window.__MALLOY_PUBLISHER_CONFIG__?.packageLinks}
+         />
       );
    }
 }

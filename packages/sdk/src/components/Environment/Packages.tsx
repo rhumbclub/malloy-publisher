@@ -26,11 +26,13 @@ import EditPackageDialog from "./EditPackageDialog";
 interface PackagesProps {
    onSelectPackage: (to: string, event?: React.MouseEvent) => void;
    resourceUri: string;
+   packageLinks?: Record<string, { label: string; href: string }>;
 }
 
 export default function Packages({
    onSelectPackage,
    resourceUri,
+   packageLinks,
 }: PackagesProps) {
    const { apiClients } = useServer();
    const { environmentName } = parseResourceUri(resourceUri);
@@ -67,6 +69,7 @@ export default function Packages({
                      pkg={pkg}
                      packageResourceUri={packageResourceUri}
                      onSelectPackage={onSelectPackage}
+                     link={packageLinks?.[pkg.name]}
                   />
                </Grid>
             );
@@ -79,10 +82,12 @@ function PackageCard({
    pkg,
    packageResourceUri,
    onSelectPackage,
+   link,
 }: {
    pkg: Package;
    packageResourceUri: string;
    onSelectPackage: (to: string, event?: React.MouseEvent) => void;
+   link?: { label: string; href: string };
 }) {
    const { mutable } = useServer();
    const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
@@ -106,10 +111,14 @@ function PackageCard({
    return (
       <Card
          variant="outlined"
-         onClick={handleClick}
+         {...(link
+            ? { component: "a", href: link.href }
+            : { onClick: handleClick })}
          sx={{
             height: "100%",
             cursor: "pointer",
+            color: "inherit",
+            textDecoration: "none",
             borderRadius: 3,
             borderColor: "divider",
             boxShadow: "none",
@@ -144,7 +153,7 @@ function PackageCard({
                      noWrap
                      sx={{ fontWeight: 600, mb: 0.5 }}
                   >
-                     {pkg.name}
+                     {link?.label ?? pkg.name}
                   </Typography>
                   <Tooltip title={description} followCursor enterDelay={1000}>
                      <Typography

@@ -8,7 +8,12 @@ export type OAuthConfig = {
    redirectUri: string;
 };
 
-export type PublisherRuntimeConfig = { oauth?: OAuthConfig };
+export type PackageLink = { label: string; href: string };
+
+export type PublisherRuntimeConfig = {
+   oauth?: OAuthConfig;
+   packageLinks?: Record<string, PackageLink>;
+};
 
 type Discovery = {
    issuer: string;

@@ -14,11 +14,13 @@ import Packages from "./Packages";
 interface EnvironmentProps {
    onSelectPackage: (to: string, event?: React.MouseEvent) => void;
    resourceUri: string;
+   packageLinks?: Record<string, { label: string; href: string }>;
 }
 
 export default function Environment({
    onSelectPackage,
    resourceUri,
+   packageLinks,
 }: EnvironmentProps) {
    const { mutable } = useServer();
    const { environmentName } = parseResourceUri(resourceUri);
@@ -69,6 +71,7 @@ export default function Environment({
             <Packages
                onSelectPackage={onSelectPackage}
                resourceUri={resourceUri}
+               packageLinks={packageLinks}
             />
          </Box>
 
