@@ -247,11 +247,34 @@ function SourceExplorerComponentInner({
    return (
       <StyledExplorerContent
          key={sourceAndPath.sourceInfo.name}
-         sx={{
+         sx={(theme) => ({
             border: "1px solid #e0e0e0",
             borderRadius: "8px",
             overflow: "hidden",
-         }}
+            "& .malloy-explorer-panels > div:not(:last-child) > div:last-child":
+               {
+                  width: "9px",
+                  right: "-4px",
+                  background: `linear-gradient(${theme.palette.divider}, ${theme.palette.divider}) center / 1px 100% no-repeat`,
+                  "&::after": {
+                     content: '""',
+                     position: "absolute",
+                     top: "calc(50% - 18px)",
+                     left: "2px",
+                     width: "5px",
+                     height: "36px",
+                     border: `1px solid ${theme.palette.divider}`,
+                     borderRadius: "999px",
+                     backgroundColor: theme.palette.background.paper,
+                     boxShadow: theme.shadows[1],
+                     pointerEvents: "none",
+                  },
+                  "&:hover::after": {
+                     borderColor: theme.palette.primary.main,
+                     backgroundColor: theme.palette.primary.main,
+                  },
+               },
+         })}
       >
          <MalloyExplorerProvider
             source={sourceAndPath.sourceInfo}
@@ -262,6 +285,7 @@ function SourceExplorerComponentInner({
             onQueryChange={onQueryChange}
          >
             <div
+               className="malloy-explorer-panels"
                style={{
                   display: "flex",
                   height: "100%",
@@ -270,7 +294,7 @@ function SourceExplorerComponentInner({
             >
                <ResizableCollapsiblePanel
                   isInitiallyExpanded={true}
-                  initialWidth={180}
+                  initialWidth={280}
                   minWidth={180}
                   icon="database"
                   title={sourceAndPath.sourceInfo.name}
