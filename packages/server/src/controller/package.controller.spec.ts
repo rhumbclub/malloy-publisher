@@ -8,6 +8,21 @@ import { BadRequestError } from "../errors";
 import type { EnvironmentStore } from "../service/environment_store";
 import { PackageController } from "./package.controller";
 
+describe("PackageController reload", () => {
+   it("rejects reload=true when the Publisher config is frozen", async () => {
+      const getEnvironment = sinon.stub();
+      const controller = new PackageController({
+         publisherConfigIsFrozen: true,
+         getEnvironment,
+      } as unknown as EnvironmentStore);
+
+      await expect(controller.getPackage("env", "pkg", true)).rejects.toThrow(
+         /frozenConfig/,
+      );
+      expect(getEnvironment.called).toBe(false);
+   });
+});
+
 describe("PackageController.addPackage explores validation", () => {
    afterEach(() => {
       sinon.restore();

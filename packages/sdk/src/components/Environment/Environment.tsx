@@ -72,16 +72,20 @@ export default function Environment({
             />
          </Box>
 
-         <Box sx={{ mb: 5 }}>
-            <Connections resourceUri={resourceUri} />
-         </Box>
+         {mutable && (
+            <>
+               <Box sx={{ mb: 5 }}>
+                  <Connections resourceUri={resourceUri} />
+               </Box>
 
-         <Box sx={{ mb: 5 }}>
-            <EnvironmentMaterializations
-               resourceUri={resourceUri}
-               onClickPackageFile={onSelectPackage}
-            />
-         </Box>
+               <Box sx={{ mb: 5 }}>
+                  <EnvironmentMaterializations
+                     resourceUri={resourceUri}
+                     onClickPackageFile={onSelectPackage}
+                  />
+               </Box>
+            </>
+         )}
 
          <About resourceUri={resourceUri} />
       </Container>

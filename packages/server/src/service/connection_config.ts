@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { createPrivateKey } from "crypto";
-import { existsSync } from "fs";
+import { existsSync, realpathSync, statSync } from "fs";
 import path from "path";
 import { components } from "../api";
 import { BadRequestError } from "../errors";
@@ -54,7 +54,10 @@ export type AssembledEnvironmentConnections = {
    apiConnections: ApiConnection[];
 };
 
-const PUBLISHER_DUCKDB_API_FIELDS = new Set<string>(["attachedDatabases"]);
+const PUBLISHER_DUCKDB_API_FIELDS = new Set<string>([
+   "attachedDatabases",
+   "databasePath",
+]);
 
 /**
  * Collapse `null` to `undefined` for an optional connection field.
@@ -165,7 +168,7 @@ export function validateDuckdbApiSurface(connection: ApiConnection): void {
       throw new Error(
          `Unsupported DuckDB connection field(s): ${unsupportedFields.join(
             ", ",
-         )}. Publisher only supports attachedDatabases for environment-authored DuckDB connections.`,
+         )}. Publisher only supports attachedDatabases and databasePath for environment-authored DuckDB connections.`,
       );
    }
 }
@@ -506,6 +509,27 @@ function validateConnectionShape(connection: ApiConnection): void {
          {
             const attached =
                connection.duckdbConnection.attachedDatabases ?? [];
+            const configuredPath = connection.duckdbConnection.databasePath;
+            if (configuredPath !== undefined) {
+               if (!path.isAbsolute(configuredPath)) {
+                  throw new Error(
+                     `DuckDB databasePath for "${connection.name}" must be absolute.`,
+                  );
+               }
+               if (
+                  !existsSync(configuredPath) ||
+                  !statSync(configuredPath).isFile()
+               ) {
+                  throw new Error(
+                     `DuckDB databasePath for "${connection.name}" must be an existing file.`,
+                  );
+               }
+               if (attached.length > 0) {
+                  throw new Error(
+                     `DuckDB connection "${connection.name}" cannot combine databasePath with attachedDatabases.`,
+                  );
+               }
+            }
             // AttachedDatabase reuses the BigqueryConnection schema, but the
             // ATTACH path builds a DuckDB BIGQUERY secret from key JSON — the
             // DuckDB extension takes a key, not a token — so an impersonation
@@ -527,7 +551,7 @@ function validateConnectionShape(connection: ApiConnection): void {
                   );
                }
             }
-            if (attached.length === 0) {
+            if (configuredPath === undefined && attached.length === 0) {
                throw new Error(
                   `DuckDB connection "${connection.name}" has no attached databases. Add at least one foreign database (BigQuery, Snowflake, Postgres, GCS, S3, Azure) to attachedDatabases, or remove this connection entirely — each package already gets a per-package DuckDB sandbox named "duckdb" automatically.`,
                );
@@ -994,11 +1018,17 @@ export function assembleEnvironmentConnections(
          connection.duckdbConnection?.attachedDatabases ?? [];
       const isDuckLake = connection.type === "ducklake";
       const isDuckdb = connection.type === "duckdb";
-      const databasePath = isDuckLake
-         ? path.join(environmentPath, `${connection.name}_ducklake.duckdb`)
-         : isDuckdb
-           ? path.join(environmentPath, `${connection.name}.duckdb`)
-           : undefined;
+      const configuredDatabasePath = connection.duckdbConnection?.databasePath;
+      const databasePath = configuredDatabasePath
+         ? realpathSync(configuredDatabasePath)
+         : isDuckLake
+           ? path.join(environmentPath, `${connection.name}_ducklake.duckdb`)
+           : isDuckdb
+             ? path.join(environmentPath, `${connection.name}.duckdb`)
+             : undefined;
+      if (configuredDatabasePath && apiConnection.attributes) {
+         apiConnection.attributes.canPersist = false;
+      }
 
       metadata.set(connection.name, {
          apiConnection,
@@ -1170,11 +1200,19 @@ export function assembleEnvironmentConnections(
                   `DuckDB attached database names cannot conflict with connection name ${connection.name}`,
                );
             }
-            pojo.connections[connection.name] = buildDuckdbEntry(
-               connection.name,
-               environmentPath,
-               `${connection.name}.duckdb`,
-            );
+            pojo.connections[connection.name] = configuredDatabasePath
+               ? {
+                    is: "duckdb",
+                    databasePath,
+                    readOnly: true,
+                    securityPolicy: "sandboxed",
+                    allowedDirectories: [path.dirname(databasePath!)],
+                 }
+               : buildDuckdbEntry(
+                    connection.name,
+                    environmentPath,
+                    `${connection.name}.duckdb`,
+                 );
             break;
          }
 

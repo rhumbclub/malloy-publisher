@@ -47,7 +47,7 @@ export default function Package({
    onClickPackageFile,
    resourceUri,
 }: PackageProps) {
-   const { apiClients, server } = useServer();
+   const { apiClients, server, mutable } = useServer();
    const onClick =
       onClickPackageFile ??
       ((to: string) => {
@@ -449,18 +449,20 @@ export default function Package({
                   {databases.length === 0 && <EmptyRow label="No data files" />}
                </PackageSection>
 
-               <PackageSection title="Materializations">
-                  <PackageItemRow
-                     type="materialization"
-                     label="Materializations"
-                     onClick={(event) =>
-                        onClick(
-                           `/${environmentName}/${packageName}/materializations`,
-                           event,
-                        )
-                     }
-                  />
-               </PackageSection>
+               {mutable && (
+                  <PackageSection title="Materializations">
+                     <PackageItemRow
+                        type="materialization"
+                        label="Materializations"
+                        onClick={(event) =>
+                           onClick(
+                              `/${environmentName}/${packageName}/materializations`,
+                              event,
+                           )
+                        }
+                     />
+                  </PackageSection>
+               )}
 
                {hasReadme && (
                   <Box sx={{ mt: 6 }}>

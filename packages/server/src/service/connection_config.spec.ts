@@ -3,6 +3,9 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { generateKeyPairSync } from "crypto";
+import { mkdtempSync, realpathSync, writeFileSync } from "fs";
+import os from "os";
+import path from "path";
 import { components } from "../api";
 import {
    assembleEnvironmentConnections,
@@ -10,6 +13,72 @@ import {
 } from "./connection_config";
 
 type ApiConnection = components["schemas"]["Connection"];
+
+describe("assembleEnvironmentConnections — read-only DuckDB file", () => {
+   it("requires an absolute existing file and rejects attachments", () => {
+      const file = path.join(
+         mkdtempSync(path.join(os.tmpdir(), "publisher-")),
+         "snapshot.duckdb",
+      );
+      writeFileSync(file, "test");
+
+      expect(() =>
+         assembleEnvironmentConnections([
+            {
+               name: "snapshot",
+               type: "duckdb",
+               duckdbConnection: { databasePath: "snapshot.duckdb" },
+            },
+         ]),
+      ).toThrow(/must be absolute/);
+      expect(() =>
+         assembleEnvironmentConnections([
+            {
+               name: "snapshot",
+               type: "duckdb",
+               duckdbConnection: {
+                  databasePath: file,
+                  attachedDatabases: [
+                     {
+                        name: "s3",
+                        type: "s3",
+                        s3Connection: {
+                           accessKeyId: "key",
+                           secretAccessKey: "secret",
+                        },
+                     },
+                  ],
+               },
+            },
+         ]),
+      ).toThrow(/cannot combine databasePath with attachedDatabases/);
+   });
+
+   it("forces the file into a non-persistent sandbox", () => {
+      const file = path.join(
+         mkdtempSync(path.join(os.tmpdir(), "publisher-")),
+         "snapshot.duckdb",
+      );
+      writeFileSync(file, "test");
+      const { pojo, apiConnections } = assembleEnvironmentConnections([
+         {
+            name: "snapshot",
+            type: "duckdb",
+            duckdbConnection: { databasePath: file },
+         },
+      ]);
+      const canonicalFile = realpathSync(file);
+
+      expect(pojo.connections.snapshot).toEqual({
+         is: "duckdb",
+         databasePath: canonicalFile,
+         readOnly: true,
+         securityPolicy: "sandboxed",
+         allowedDirectories: [path.dirname(canonicalFile)],
+      });
+      expect(apiConnections[0].attributes?.canPersist).toBe(false);
+   });
+});
 
 describe("assembleEnvironmentConnections — databricks", () => {
    const validBase: ApiConnection = {

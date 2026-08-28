@@ -192,3 +192,13 @@ EXPOSE 4000 4040
 # Operators that want a config provide it at /publisher/publisher.config.json
 # (mount as volume) or override CMD with --config <path>.
 CMD ["bun", "run", "./packages/server/dist/server.mjs", "--server_root", "/publisher"]
+
+# Optional AWS Lambda target. The default `final` target remains the normal
+# container image; deployments select this target explicitly.
+FROM public.ecr.aws/awsguru/aws-lambda-adapter:0.9.1@sha256:46d6625e68cbbdd2efab4a20245977664513f13ffef47915b000d431adcea0b4 AS lambda-adapter
+
+FROM final AS lambda
+COPY --from=lambda-adapter /lambda-adapter /opt/extensions/lambda-adapter
+ENV AWS_LWA_PORT=4000 \
+    AWS_LWA_READINESS_CHECK_PATH=/api/v0/status \
+    AWS_LWA_ASYNC_INIT=true

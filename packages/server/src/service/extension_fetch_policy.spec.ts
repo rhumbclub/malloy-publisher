@@ -119,10 +119,15 @@ describe("EXTENSION_FETCH_POLICY=local-only extension loading", () => {
 
 describe("applyExtensionSessionSettings", () => {
    const original = process.env.EXTENSION_FETCH_POLICY;
+   const sandboxPath = path.join(process.cwd(), "test-extension-policy-locked");
+   beforeEach(async () => {
+      await fs.mkdir(sandboxPath, { recursive: true });
+   });
    afterEach(() => {
       sinon.restore();
       if (original === undefined) delete process.env.EXTENSION_FETCH_POLICY;
       else process.env.EXTENSION_FETCH_POLICY = original;
+      return fs.rm(sandboxPath, { recursive: true, force: true });
    });
 
    // Minimal stand-in — the helper only ever calls runSQL.
@@ -181,6 +186,27 @@ describe("applyExtensionSessionSettings", () => {
       await expect(
          applyExtensionSessionSettings(mockConn(runSQL)),
       ).rejects.toThrow(/EXTENSION_FETCH_POLICY=local-only/);
+   });
+
+   it("accepts a locked sandbox that already disabled auto-install", async () => {
+      process.env.EXTENSION_FETCH_POLICY = "local-only";
+      const databasePath = path.join(sandboxPath, "snapshot.duckdb");
+      const bootstrap = new DuckDBConnection("bootstrap", databasePath);
+      await bootstrap.runSQL("CREATE TABLE test(value INTEGER)");
+      await bootstrap.close();
+      const connection = new DuckDBConnection({
+         name: "snapshot",
+         databasePath,
+         readOnly: true,
+         securityPolicy: "sandboxed",
+         allowedDirectories: [sandboxPath],
+         workingDirectory: sandboxPath,
+      });
+
+      await expect(
+         applyExtensionSessionSettings(connection),
+      ).resolves.toBeUndefined();
+      await connection.close();
    });
 
    it("does NOT fail a tier attach under on-demand when the pin fails", async () => {

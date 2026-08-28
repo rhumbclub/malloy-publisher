@@ -4967,6 +4967,13 @@ components:
         environment configs cannot widen deployment policy through low-level
         DuckDB settings.
       properties:
+        databasePath:
+          type: string
+          description: >
+            Absolute path to an existing DuckDB file. Mutually exclusive with
+            attachedDatabases. Publisher opens this file read-only with
+            sandboxed filesystem access limited to the file's parent directory;
+            persistence cannot be enabled by configuration.
         attachedDatabases:
           type: array
           items:

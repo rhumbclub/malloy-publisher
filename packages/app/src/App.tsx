@@ -56,12 +56,13 @@ export const createMalloyRouter = (
    basePath: string = "/",
    workbookStorage: WorkbookStorage,
    headerProps?: HeaderProps,
+   getAccessToken?: () => Promise<string>,
 ) => {
    return createBrowserRouter([
       {
          path: basePath,
          element: (
-            <ServerProvider>
+            <ServerProvider getAccessToken={getAccessToken}>
                <WorkbookStorageProvider workbookStorage={workbookStorage}>
                   <PublisherMuiThemeProvider>
                      <Suspense fallback={<Loading />}>
@@ -120,16 +121,24 @@ export interface MalloyPublisherAppProps {
    basePath?: string;
    headerProps: HeaderProps;
    workbookStorage: WorkbookStorage;
+   getAccessToken?: () => Promise<string>;
 }
 
 export const MalloyPublisherApp = ({
    basePath = "/",
    workbookStorage,
    headerProps,
+   getAccessToken,
 }: MalloyPublisherAppProps) => {
    const router = useMemo(
-      () => createMalloyRouter(basePath, workbookStorage, headerProps),
-      [basePath, workbookStorage, headerProps],
+      () =>
+         createMalloyRouter(
+            basePath,
+            workbookStorage,
+            headerProps,
+            getAccessToken,
+         ),
+      [basePath, workbookStorage, headerProps, getAccessToken],
    );
 
    return <RouterProvider router={router} />;

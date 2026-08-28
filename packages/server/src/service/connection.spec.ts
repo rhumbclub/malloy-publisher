@@ -2038,6 +2038,43 @@ describe("connection integration tests", () => {
             ).resolves.toBeDefined();
          });
 
+         it("opens an operator snapshot read-only without changing its bytes", async () => {
+            const snapshotPath = path.join(
+               testEnvironmentPath,
+               "snapshot.duckdb",
+            );
+            const bootstrap = new DuckDBConnection("bootstrap", snapshotPath);
+            await bootstrap.runSQL("CREATE TABLE revenue(amount INTEGER)");
+            await bootstrap.runSQL("INSERT INTO revenue VALUES (42)");
+            await bootstrap.close();
+            const before = await fs.readFile(snapshotPath);
+
+            const { malloyConnections } = await createEnvironmentConnections(
+               [
+                  {
+                     name: "snapshot",
+                     type: "duckdb",
+                     duckdbConnection: { databasePath: snapshotPath },
+                  },
+               ],
+               testEnvironmentPath,
+            );
+            const connection = malloyConnections.get(
+               "snapshot",
+            ) as DuckDBConnection;
+            createdConnections.push(connection);
+
+            await expect(
+               connection.runSQL("SELECT amount FROM revenue"),
+            ).resolves.toMatchObject({ rows: [{ amount: 42 }] });
+            expect(connection.canPersist()).toBe(false);
+            await expect(
+               connection.runSQL("INSERT INTO revenue VALUES (99)"),
+            ).rejects.toThrow(/read.only|write/i);
+            await connection.close();
+            expect(await fs.readFile(snapshotPath)).toEqual(before);
+         });
+
          it("should keep external access available for federated DuckDB entries", () => {
             const assembled = assembleEnvironmentConnections(
                [

@@ -105,6 +105,9 @@ export class PackageController {
       environmentName: string,
       packageName: string,
    ): Promise<{ metadata: ApiPackage; mode: PackageReloadMode }> {
+      if (this.environmentStore.publisherConfigIsFrozen) {
+         throw new FrozenConfigError();
+      }
       const environment = await this.environmentStore.getEnvironment(
          environmentName,
          false,

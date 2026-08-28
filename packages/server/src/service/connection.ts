@@ -194,11 +194,11 @@ export async function applySessionResourceLimits(
  * Called for EVERY Publisher-owned DuckDB session — the environment lookup
  * funnel, the per-package sandbox, and the attach entry points — so the pin has
  * no gap regardless of whether a session has attached databases. On a failed
- * SET: under `local-only` we FAIL CLOSED (throw), because the whole promise of
- * that mode is that no session can reach the network; under the tier's
- * on-demand always-off case the pin is defense-in-depth (the install path
- * already avoids implicit fetches), so we log and continue rather than fail an
- * otherwise-valid attach.
+ * SET under `local-only`, an already-locked session is accepted only after
+ * verifying auto-install is disabled; otherwise we FAIL CLOSED. Under the
+ * tier's on-demand always-off case the pin is defense-in-depth (the install
+ * path already avoids implicit fetches), so we log and continue rather than
+ * fail an otherwise-valid attach.
  */
 export async function applyExtensionSessionSettings(
    connection: DuckDBConnection,
@@ -226,6 +226,17 @@ export async function applyExtensionSessionSettings(
    } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       if (policy === "local-only") {
+         try {
+            const current = await connection.runSQL(
+               "SELECT current_setting('autoinstall_known_extensions') AS autoinstall;",
+            );
+            if (String(current.rows?.[0]?.autoinstall) === "false") {
+               extensionSessionPinned.add(connection);
+               return;
+            }
+         } catch {
+            // The original error below is the actionable failure.
+         }
          throw new Error(
             `Failed to disable DuckDB implicit extension auto-install under ` +
                `EXTENSION_FETCH_POLICY=local-only; refusing to open a session that ` +
@@ -2062,6 +2073,11 @@ export function buildEnvironmentMalloyConfig(
             lookupConnection: async (name?: string): Promise<Connection> => {
                const metadata = getMetadataForLookup(assembled.metadata, name);
                const connection = await resolveConnection(name, metadata);
+               if (metadata?.apiConnection.attributes?.canPersist === false) {
+                  (
+                     connection as unknown as { canPersist: () => boolean }
+                  ).canPersist = () => false;
+               }
                // Pin every environment-level DuckDB session against implicit
                // auto-install (policy-driven) at this one exit — independent of
                // the attach paths, so the guarantee holds even if a resolution
