@@ -15,6 +15,7 @@ import {
 } from "./tools/reload_package_tool";
 import { registerSearchDatabaseSchemaTool } from "./tools/search_database_schema_tool";
 import { registerGetStatusTool } from "./tools/get_status_tool";
+import { registerComparisonReportTool } from "./tools/comparison_report_tool";
 import skillsBundle from "./skills/skills_bundle.json";
 
 export const testServerInfo = {
@@ -55,6 +56,7 @@ Results and any charts render in the Publisher web UI on the REST port (4000 by 
 
 export function initializeMcpServer(
    environmentStore: EnvironmentStore,
+   frozenConfig = false,
 ): McpServer {
    logger.info("[MCP Init] Starting initializeMcpServer...");
    const startTime = performance.now();
@@ -66,9 +68,12 @@ export function initializeMcpServer(
    registerExecuteQueryTool(mcpServer, environmentStore);
    registerGetContextTool(mcpServer, environmentStore);
    registerDocsSearchTool(mcpServer, environmentStore);
-   registerCompileTool(mcpServer, environmentStore);
-   registerReloadPackageTool(mcpServer, environmentStore);
-   registerSearchDatabaseSchemaTool(mcpServer, environmentStore);
+   registerComparisonReportTool(mcpServer, environmentStore);
+   if (!frozenConfig) {
+      registerCompileTool(mcpServer, environmentStore);
+      registerReloadPackageTool(mcpServer, environmentStore);
+      registerSearchDatabaseSchemaTool(mcpServer, environmentStore);
+   }
    registerGetStatusTool(mcpServer, environmentStore);
 
    // Dual-channel: also expose each skill as an MCP prompt, so hosts that ingest

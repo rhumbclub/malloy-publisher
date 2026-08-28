@@ -25,6 +25,7 @@ import { buildQueryEnvelope } from "../query_envelope";
 import { mintCorrelationId } from "../../service/query_metadata";
 import { bigIntReplacer } from "../../json_utils";
 import { MCP_ERROR_MESSAGES } from "../mcp_constants";
+import { hasComparisonReports } from "../../comparison_reports";
 
 /**
  * Malloy's two ways of saying a name is not in the model's namespace: a bare
@@ -133,8 +134,6 @@ export function registerExecuteQueryTool(
             givens,
          } = params;
 
-         logger.info("[MCP Tool executeQuery] Received params:", { params });
-
          const hasAdhocQuery = !!query;
          const hasNamedQuery = !!queryName;
 
@@ -173,6 +172,27 @@ export function registerExecuteQueryTool(
 
          // --- Execute Query ---
          const { model, environment, pkg } = modelResult;
+         if (await hasComparisonReports(pkg)) {
+            return jsonToolError(
+               buildMalloyUri(
+                  {
+                     environment: environmentName,
+                     package: packageName,
+                     resourceType: "models",
+                     resourceName: modelPath,
+                  },
+                  "result",
+               ),
+               {
+                  message:
+                     "Comparison packages do not allow ad-hoc or named Malloy queries.",
+                  suggestions: [
+                     "Use malloy_runComparisonReport for ERP UI comparison.",
+                     "Use malloy_getContext and malloy_executeQuery against the governed package for analysis.",
+                  ],
+               },
+            );
+         }
          logger.info(
             `[MCP Tool executeQuery] Model found. Proceeding to execute query.`,
          );

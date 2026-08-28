@@ -68,6 +68,38 @@ describe("MCP server over the MCP protocol (in-memory)", () => {
       expect(names.has("malloy_reloadPackage")).toBe(true);
       expect(names.has("malloy_searchDatabaseSchema")).toBe(true);
       expect(names.has("malloy_getStatus")).toBe(true);
+      expect(names.has("malloy_runComparisonReport")).toBe(true);
+   });
+
+   it("keeps a frozen publisher read-only", async () => {
+      const frozenServer = initializeMcpServer(
+         {
+            getEnvironment: async () => {
+               throw new Error("not used");
+            },
+         } as unknown as EnvironmentStore,
+         true,
+      );
+      const [clientTransport, serverTransport] =
+         InMemoryTransport.createLinkedPair();
+      await frozenServer.connect(serverTransport);
+      const frozenClient = new Client({
+         name: "frozen-mcp-test",
+         version: "0.0.0",
+      });
+      await frozenClient.connect(clientTransport);
+      const names = (await frozenClient.listTools()).tools.map(
+         (tool) => tool.name,
+      );
+      expect(names.sort()).toEqual(
+         [
+            "malloy_executeQuery",
+            "malloy_getContext",
+            "malloy_getStatus",
+            "malloy_runComparisonReport",
+            "malloy_searchDocs",
+         ].sort(),
+      );
    });
 
    /**

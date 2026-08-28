@@ -15,6 +15,7 @@ import { buildMalloyUri, classifyToolError } from "../handler_utils";
 import { jsonResource, jsonToolError } from "../tool_response";
 import { logger } from "../../logger";
 import { entityRowKey, trySemanticSearch } from "./embedding_index";
+import { hasComparisonReports } from "../../comparison_reports";
 
 /**
  * A retrievable model entity: a source, one of its views, a field (dimension or
@@ -331,7 +332,6 @@ export function registerGetContextTool(
          logger.info("[MCP Tool getContext] Retrieving context", {
             environmentName,
             packageName,
-            query,
             sourceName,
             limit,
          });
@@ -471,6 +471,12 @@ export function registerGetContextTool(
             { environment: environmentName, package: packageName },
             "get-context",
          );
+         if (await hasComparisonReports(pkgIndex.pkg)) {
+            return jsonResource(uri, {
+               results: [],
+               note: "This comparison-only package exposes fixed ERP UI reports, not Malloy sources. Call malloy_runComparisonReport without reportName to list them.",
+            });
+         }
 
          // A stale package answers every tier below exactly like a current one:
          // the index is the last model that compiled, so the names are real and

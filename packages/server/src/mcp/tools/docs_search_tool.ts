@@ -121,7 +121,7 @@ export function registerDocsSearchTool(
       async (params: SearchDocsParams) => {
          const { query, limit } = params;
          const max = limit ?? 8;
-         logger.info("[MCP Tool searchDocs] Searching docs", { query, limit });
+         logger.info("[MCP Tool searchDocs] Searching docs", { limit });
 
          const results = searchDocsIndex(query, max);
 

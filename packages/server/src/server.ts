@@ -57,6 +57,7 @@ import {
    getPersistCollisionEnforce,
    getPersistStorageMode,
    getQueryMetadataMode,
+   isPublisherConfigFrozen,
 } from "./config";
 import { readBypassAuthorize } from "./authorize_bypass_header";
 import { setFilterDeprecationHeaders } from "./filter_deprecation";
@@ -93,6 +94,10 @@ import {
    parseRateLimit,
    rateLimitMiddleware,
 } from "./rate_limit";
+import {
+   getComparisonCatalog,
+   runComparisonReport,
+} from "./comparison_reports";
 
 // The first statement this module runs. On an unsupported Node this exits
 // non-zero here, before any argument parsing, any storage init, and any
@@ -372,7 +377,7 @@ registerHealthEndpoints(mcpApp);
 mcpApp.use(MCP_ENDPOINT, express.json());
 mcpApp.use(MCP_ENDPOINT, cors());
 
-mcpApp.all(MCP_ENDPOINT, async (req, res) => {
+const handleMcpRequest: express.RequestHandler = async (req, res) => {
    logger.info(`[MCP Debug] Handling ${req.method} (Stateless)`);
 
    try {
@@ -392,7 +397,10 @@ mcpApp.all(MCP_ENDPOINT, async (req, res) => {
             });
          };
 
-         const requestMcpServer = initializeMcpServer(environmentStore);
+         const requestMcpServer = initializeMcpServer(
+            environmentStore,
+            isPublisherConfigFrozen(SERVER_ROOT),
+         );
          await requestMcpServer.connect(transport);
 
          res.on("close", () => {
@@ -450,7 +458,14 @@ mcpApp.all(MCP_ENDPOINT, async (req, res) => {
          });
       }
    }
-});
+};
+
+mcpApp.all(MCP_ENDPOINT, handleMcpRequest);
+// The REST listener is the deployable data plane. Keep the standalone MCP
+// listener for local compatibility, but expose the same stateless handler on
+// port 4000 so private gateways need only one service discovery target.
+app.use(MCP_ENDPOINT, express.json(), cors());
+app.all(MCP_ENDPOINT, handleMcpRequest);
 
 // ---------------------------------------------------------------------------
 // In-package HTML data apps
@@ -911,6 +926,51 @@ app.get(
          res.json(dataApps);
       } catch (error) {
          logger.error("Failed to list package data apps", { error });
+         const { json, status } = internalErrorToHttpError(error as Error);
+         res.status(status).json(json);
+      }
+   },
+);
+
+app.get(
+   `${API_PREFIX}/environments/:environmentName/packages/:packageName/comparison-reports`,
+   async (req, res) => {
+      try {
+         const environment = await environmentStore.getEnvironment(
+            req.params.environmentName,
+            false,
+         );
+         const pkg = await environment.getPackage(
+            req.params.packageName,
+            false,
+         );
+         res.json(await getComparisonCatalog(pkg));
+      } catch (error) {
+         const { json, status } = internalErrorToHttpError(error as Error);
+         res.status(status).json(json);
+      }
+   },
+);
+
+app.post(
+   `${API_PREFIX}/environments/:environmentName/packages/:packageName/comparison-reports/:reportName/query`,
+   async (req, res) => {
+      try {
+         const environment = await environmentStore.getEnvironment(
+            req.params.environmentName,
+            false,
+         );
+         const pkg = await environment.getPackage(
+            req.params.packageName,
+            false,
+         );
+         const result = await runComparisonReport(
+            pkg,
+            req.params.reportName,
+            req.body,
+         );
+         res.type("application/json").send(result.serialized);
+      } catch (error) {
          const { json, status } = internalErrorToHttpError(error as Error);
          res.status(status).json(json);
       }
