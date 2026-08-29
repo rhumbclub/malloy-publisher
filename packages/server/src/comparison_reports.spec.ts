@@ -97,6 +97,23 @@ describe("comparison reports", () => {
       ]);
    });
 
+   it("reports the runtime snapshot privacy profile", async () => {
+      const { pkg } = fixture();
+      const previous = process.env.PUBLISHER_SNAPSHOT_LINEAGE;
+      process.env.PUBLISHER_SNAPSHOT_LINEAGE = JSON.stringify({
+         privacyProfile: "prd",
+      });
+      try {
+         expect((await getComparisonCatalog(pkg)).privacyProfile).toBe("prd");
+      } finally {
+         if (previous === undefined) {
+            delete process.env.PUBLISHER_SNAPSHOT_LINEAGE;
+         } else {
+            process.env.PUBLISHER_SNAPSHOT_LINEAGE = previous;
+         }
+      }
+   });
+
    it("validates filters, executes fixed SQL, and strips summary columns", async () => {
       const { pkg, sql } = fixture();
       const result = await runComparisonReport(pkg, "sample", {

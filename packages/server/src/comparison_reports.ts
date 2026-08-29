@@ -120,7 +120,7 @@ export async function getComparisonCatalog(pkg: Package) {
    const manifest = await loadManifest(pkg);
    return {
       warning: manifest.warning,
-      privacyProfile: manifest.privacyProfile,
+      privacyProfile: lineage(manifest.privacyProfile).privacyProfile,
       reports: manifest.reports.map(catalogReport),
    };
 }
