@@ -6,6 +6,20 @@ import type { Cell as XlsxCell, SheetData } from "write-excel-file/browser";
 
 export const XLSX_FILE_NAME = "malloy.xlsx";
 
+const excelRowOnlyFreeze = {
+   files: {
+      transform: {
+         "xl/worksheets/sheet{id}.xml": {
+            transform: (xml: string) =>
+               xml.replace(
+                  '<pane ySplit="1" xSplit="0" topLeftCell="A2" activePane="bottomRight" state="frozen"/>',
+                  '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>',
+               ),
+         },
+      },
+   },
+};
+
 const scalarCellKinds = new Set<Malloy.Cell["kind"]>([
    "string_cell",
    "boolean_cell",
@@ -99,9 +113,15 @@ export function flatResultSheet(result: Malloy.Result): SheetData {
 
 export async function downloadFlatResult(result: Malloy.Result): Promise<void> {
    const { default: writeXlsxFile } = await import("write-excel-file/browser");
-   await writeXlsxFile(flatResultSheet(result), {
-      sheet: "Data",
-      stickyRowsCount: 1,
-      dateFormat: "yyyy-mm-dd",
-   }).toFile(XLSX_FILE_NAME);
+   await writeXlsxFile(
+      flatResultSheet(result),
+      {
+         sheet: "Data",
+         stickyRowsCount: 1,
+         dateFormat: "yyyy-mm-dd",
+      },
+      {
+         features: [excelRowOnlyFreeze],
+      },
+   ).toFile(XLSX_FILE_NAME);
 }
