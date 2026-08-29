@@ -5,6 +5,8 @@ SPDX-License-Identifier: MIT
 
 # Working with Malloy Publisher
 
+As of 2026-08-29, fork PR CI has pre-existing failures from a missing `BQ_PRESTO_TRINO_KEY` and stale MCP tool-list/description assertions. After the relevant local typecheck, lint, unit, and Playwright checks pass, proceed without waiting on those jobs.
+
 Publisher is the open-source semantic model server for [Malloy](https://malloydata.dev). It serves one or more Malloy model packages over a REST API and a single MCP endpoint. If you are an AI agent working in this repo, here is what you can do with it and how to start.
 
 ## What you can do

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { expect, test, Page } from "@playwright/test";
+import { strFromU8, unzipSync } from "fflate";
 import { readFile } from "node:fs/promises";
 import { DEFAULT_ENV, PACKAGES } from "./helpers/fixtures";
 import { gotoHome, openEnvironment, openPackage } from "./helpers/navigation";
@@ -150,8 +151,14 @@ test.describe("package-models", () => {
       expect(download.suggestedFilename()).toBe("malloy.xlsx");
       const downloadPath = await download.path();
       expect(downloadPath).not.toBeNull();
-      expect((await readFile(downloadPath!)).subarray(0, 4)).toEqual(
+      const workbook = await readFile(downloadPath!);
+      expect(workbook.subarray(0, 4)).toEqual(
          Buffer.from([0x50, 0x4b, 0x03, 0x04]),
+      );
+      expect(
+         strFromU8(unzipSync(workbook)["xl/worksheets/sheet1.xml"]),
+      ).toContain(
+         '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>',
       );
       expect(queryRequests).toBe(1);
 
