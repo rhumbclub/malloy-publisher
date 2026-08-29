@@ -14,6 +14,7 @@ import { useMutationWithApiError } from "../../hooks/useQueryWithApiError";
 import { parseResourceUri } from "../../utils/formatting";
 // import { ApiErrorDisplay } from "../ApiErrorDisplay";
 import { useServer } from "../ServerProvider";
+import { XlsxDownloadButton } from "./XlsxDownloadButton";
 
 type ExplorerComponents = typeof import("@malloydata/malloy-explorer");
 type QueryBuilder = typeof import("@malloydata/malloy-query-builder");
@@ -293,9 +294,21 @@ function SourceExplorerComponentInner({
       <StyledExplorerContent
          key={sourceAndPath.sourceInfo.name}
          sx={(theme) => ({
+            position: "relative",
             border: "1px solid #e0e0e0",
             borderRadius: "8px",
             overflow: "hidden",
+            "& a[download$='.csv']": { marginRight: "34px" },
+            "& .publisher-xlsx-export": {
+               display: "none",
+               position: "absolute",
+               top: "8px",
+               right: "10px",
+               zIndex: 2,
+            },
+            "&:has(a[download$='.csv']) .publisher-xlsx-export": {
+               display: "block",
+            },
             "& .malloy-explorer-panels > div:not(:last-child) > div:last-child":
                {
                   width: "9px",
@@ -384,6 +397,7 @@ function SourceExplorerComponentInner({
                />
             </div>
          </MalloyExplorerProvider>
+         <XlsxDownloadButton result={submittedQuery?.response?.result} />
       </StyledExplorerContent>
    );
 }
