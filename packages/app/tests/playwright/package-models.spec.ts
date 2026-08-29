@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { expect, test, Page } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 import { DEFAULT_ENV, PACKAGES } from "./helpers/fixtures";
 import { gotoHome, openEnvironment, openPackage } from "./helpers/navigation";
 
@@ -92,7 +93,9 @@ test.describe("package-models", () => {
       await expect(sourcePanel).toHaveCSS("width", "400px");
    });
 
-   test("picking a dimension and running returns rows", async ({ page }) => {
+   test("picking a dimension returns rows and exports the current result", async ({
+      page,
+   }) => {
       await gotoHome(page);
       await openEnvironment(page, DEFAULT_ENV);
       await openPackage(page, DEFAULT_ENV, PACKAGES.storefront);
@@ -115,6 +118,15 @@ test.describe("package-models", () => {
 
       const runQuery = page.getByRole("button", { name: "Run", exact: true });
       await expect(runQuery).toBeEnabled();
+      let queryRequests = 0;
+      page.on("request", (request) => {
+         if (
+            request.method() === "POST" &&
+            new URL(request.url()).pathname.endsWith("/query")
+         ) {
+            queryRequests += 1;
+         }
+      });
       await runQuery.click();
 
       await expect(page.getByRole("tab", { name: "Results" })).toBeVisible();
@@ -122,5 +134,28 @@ test.describe("package-models", () => {
       await expect(resultsPanel).toContainText(
          /Aiden Ali|Aiden Andersson|Aiden Cohen|Aiden Diaz/,
       );
+
+      const csv = page.getByRole("link", { name: "Download CSV" });
+      const excel = page.getByRole("button", {
+         name: "Download Excel (.xlsx)",
+      });
+      await expect(csv).toBeVisible();
+      await expect(excel).toBeVisible();
+      await expect(csv).toHaveAttribute("download", /\.csv$/);
+      expect(queryRequests).toBe(1);
+
+      const downloadPromise = page.waitForEvent("download");
+      await excel.click();
+      const download = await downloadPromise;
+      expect(download.suggestedFilename()).toBe("malloy.xlsx");
+      const downloadPath = await download.path();
+      expect(downloadPath).not.toBeNull();
+      expect((await readFile(downloadPath!)).subarray(0, 4)).toEqual(
+         Buffer.from([0x50, 0x4b, 0x03, 0x04]),
+      );
+      expect(queryRequests).toBe(1);
+
+      await page.getByRole("tab", { name: "Malloy" }).click();
+      await expect(excel).not.toBeVisible();
    });
 });
