@@ -130,6 +130,7 @@ function SourceExplorerComponentInner({
    const [focusedNestViewPath, setFocusedNestViewPath] = React.useState<
       string[]
    >([]);
+   const touchResizePointer = React.useRef<number | null>(null);
 
    const {
       MalloyExplorerProvider,
@@ -244,6 +245,50 @@ function SourceExplorerComponentInner({
    if (oldSourceInfo !== sourceAndPath.sourceInfo.name) {
       return <div>Loading...</div>;
    }
+
+   const relayTouchResize = (event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.pointerType === "mouse") return;
+
+      if (event.type === "pointerdown") {
+         const handle = event.target;
+         if (
+            !(handle instanceof HTMLElement) ||
+            handle.parentElement?.parentElement !== event.currentTarget ||
+            handle !== handle.parentElement.lastElementChild
+         ) {
+            return;
+         }
+         touchResizePointer.current = event.pointerId;
+         event.preventDefault();
+         handle.dispatchEvent(
+            new MouseEvent("mousedown", {
+               bubbles: true,
+               clientX: event.clientX,
+               clientY: event.clientY,
+               button: 0,
+               buttons: 1,
+            }),
+         );
+         return;
+      }
+
+      if (touchResizePointer.current !== event.pointerId) return;
+
+      event.preventDefault();
+      const finished =
+         event.type === "pointerup" || event.type === "pointercancel";
+      document.body.dispatchEvent(
+         new MouseEvent(finished ? "mouseup" : "mousemove", {
+            bubbles: true,
+            clientX: event.clientX,
+            clientY: event.clientY,
+            button: finished ? 0 : -1,
+            buttons: finished ? 0 : 1,
+         }),
+      );
+      if (finished) touchResizePointer.current = null;
+   };
+
    return (
       <StyledExplorerContent
          key={sourceAndPath.sourceInfo.name}
@@ -255,6 +300,7 @@ function SourceExplorerComponentInner({
                {
                   width: "9px",
                   right: "-4px",
+                  touchAction: "none",
                   background: `linear-gradient(${theme.palette.divider}, ${theme.palette.divider}) center / 1px 100% no-repeat`,
                   "&::after": {
                      content: '""',
@@ -286,6 +332,10 @@ function SourceExplorerComponentInner({
          >
             <div
                className="malloy-explorer-panels"
+               onPointerDown={relayTouchResize}
+               onPointerMove={relayTouchResize}
+               onPointerUp={relayTouchResize}
+               onPointerCancel={relayTouchResize}
                style={{
                   display: "flex",
                   height: "100%",

@@ -50,6 +50,48 @@ test.describe("package-models", () => {
       await expect(page.getByRole("combobox").first()).toHaveValue("customers");
    });
 
+   test("touch-dragging a divider widens the source panel", async ({
+      page,
+   }) => {
+      await gotoHome(page);
+      await openEnvironment(page, DEFAULT_ENV);
+      await openPackage(page, DEFAULT_ENV, PACKAGES.storefront);
+      await modelRow(page, "storefront.malloy").click();
+
+      const sourcePanel = page.locator(".malloy-explorer-panels > div").first();
+      const handle = sourcePanel.locator(":scope > div").last();
+      await expect(sourcePanel).toHaveCSS("width", "280px");
+
+      const box = await handle.boundingBox();
+      expect(box).not.toBeNull();
+      const pointer = {
+         pointerId: 1,
+         pointerType: "touch",
+         isPrimary: true,
+         clientY: box!.y + 100,
+      };
+      await handle.dispatchEvent("pointerdown", {
+         ...pointer,
+         clientX: box!.x + 4,
+         button: 0,
+         buttons: 1,
+      });
+      await handle.dispatchEvent("pointermove", {
+         ...pointer,
+         clientX: box!.x + 124,
+         button: -1,
+         buttons: 1,
+      });
+      await handle.dispatchEvent("pointerup", {
+         ...pointer,
+         clientX: box!.x + 124,
+         button: 0,
+         buttons: 0,
+      });
+
+      await expect(sourcePanel).toHaveCSS("width", "400px");
+   });
+
    test("picking a dimension and running returns rows", async ({ page }) => {
       await gotoHome(page);
       await openEnvironment(page, DEFAULT_ENV);
