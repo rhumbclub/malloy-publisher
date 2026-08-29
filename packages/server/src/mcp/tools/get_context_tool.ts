@@ -19,9 +19,9 @@ import { hasComparisonReports } from "../../comparison_reports";
 
 /**
  * A retrievable model entity: a source, one of its views, a field (dimension or
- * measure) defined on a source, or a named query. Sources, views, and fields come
- * from the compiled SourceInfo (Model.getSourceInfos()); named queries from
- * Model.getQueries().
+ * measure) defined on a source or its joined business branches, or a named
+ * query. Sources, views, and fields come from the compiled SourceInfo
+ * (Model.getSourceInfos()); named queries from Model.getQueries().
  */
 interface Entity {
    id: string;
@@ -160,25 +160,36 @@ async function collectEntities(pkg: Package): Promise<Entity[]> {
             doc: docText(sourceInfo.annotations),
             embedDoc: docOnlyText(sourceInfo.annotations),
          });
-         for (const field of sourceInfo.schema.fields ?? []) {
-            // v1 indexes the queryable surface: views and dimension/measure
-            // fields. Joins (structural) and calculate (window) are skipped.
+         const addField = (
+            field: (typeof sourceInfo.schema.fields)[number],
+            name: string,
+         ) => {
             if (
                field.kind !== "view" &&
                field.kind !== "dimension" &&
                field.kind !== "measure"
             ) {
-               continue;
+               return;
             }
             entities.push({
                id: String(n++),
                kind: field.kind,
-               name: field.name,
+               name,
                source: sourceName,
                modelPath,
                doc: docText(field.annotations),
                embedDoc: docOnlyText(field.annotations),
             });
+         };
+         for (const field of sourceInfo.schema.fields ?? []) {
+            addField(field, field.name);
+            if (field.kind === "join") {
+               // ponytail: one join hop covers analytical fact branches;
+               // recurse only if real models need nested-join discovery.
+               for (const joined of field.schema.fields ?? []) {
+                  addField(joined, `${field.name}.${joined.name}`);
+               }
+            }
          }
       }
 
@@ -279,6 +290,8 @@ All optional. Supply what you know and omit the rest; each combination answers a
 - + query: a plain-English description of what you need, returning the sources, views, named queries, and dimension/measure fields most relevant to it.
 - sourceName: narrows retrieval to one source (the drill-down phase).
 - limit: caps results (max 50). Retrieval defaults to 10; the listing levels return all unless set.
+
+Joined business fields use dotted names such as reservations.charter_gross_fees. Use the returned dotted path verbatim in malloy_executeQuery.
 
 ## Response
 A JSON object with a results array whose items carry a kind field. For retrieval, each entity has kind (source / view / query / dimension / measure), name, source, modelPath, and doc; environmentName, packageName, modelPath, and source map directly onto malloy_executeQuery parameters, and for a view or named query you pass its name as queryName with sourceName. When the server is configured with an embedding provider, retrieval is ranked by semantic similarity: the payload then carries a retrieval field ("semantic", or "lexical" when the provider is unavailable) and each semantic entity a score.

@@ -185,6 +185,45 @@ const mockPackage = {
    getModel: () => mockModel,
 };
 
+const mockJoinedPackage = {
+   listModels: async () => [{ path: "yachts.malloy" }],
+   getModel: () => ({
+      getSourceInfos: () => [
+         {
+            name: "yachts",
+            annotations: [],
+            schema: {
+               fields: [
+                  {
+                     kind: "join",
+                     name: "reservations",
+                     relationship: "many",
+                     annotations: [],
+                     schema: {
+                        fields: [
+                           {
+                              kind: "dimension",
+                              name: "charter_starts_at",
+                              annotations: [],
+                           },
+                           {
+                              kind: "measure",
+                              name: "charter_gross_fees",
+                              annotations: [
+                                 "#(doc) Financial success from charter reservations.",
+                              ],
+                           },
+                        ],
+                     },
+                  },
+               ],
+            },
+         },
+      ],
+      getQueries: () => [],
+   }),
+};
+
 // A package with more than 10 sources, to prove the enumeration tier is not
 // silently capped the way ranked retrieval is.
 const manySourceNames = Array.from({ length: 12 }, (_, i) => `s${i}`);
@@ -537,6 +576,27 @@ describe("get_context discovery tiers", () => {
                r.name === "state" && r.kind === "dimension",
          ),
       ).toBe(true);
+   });
+
+   it("tier 4: retrieves dotted fields from a joined business branch", async () => {
+      const handler = captureHandler({
+         getEnvironment: async () => envWith(async () => mockJoinedPackage),
+      });
+      const { results } = parse(
+         await handler({
+            environmentName: "prd",
+            packageName: "governed",
+            sourceName: "yachts",
+            query: "financial success from charter reservations",
+         }),
+      );
+      expect(results).toContainEqual(
+         expect.objectContaining({
+            kind: "measure",
+            name: "reservations.charter_gross_fees",
+            source: "yachts",
+         }),
+      );
    });
 
    it("tier 1: surfaces a listEnvironments failure as a tool error", async () => {
