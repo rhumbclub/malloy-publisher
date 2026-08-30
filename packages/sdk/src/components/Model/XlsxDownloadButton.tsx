@@ -15,9 +15,15 @@ import { downloadFlatResult, isFlatResult } from "../../utils/xlsxExport";
 
 interface XlsxDownloadButtonProps {
    result?: Malloy.Result;
+   name: string;
+   disabled?: boolean;
 }
 
-export function XlsxDownloadButton({ result }: XlsxDownloadButtonProps) {
+export function XlsxDownloadButton({
+   result,
+   name,
+   disabled = false,
+}: XlsxDownloadButtonProps) {
    const [exporting, setExporting] = useState(false);
    const [exportFailed, setExportFailed] = useState(false);
    const exportable = useMemo(
@@ -31,7 +37,7 @@ export function XlsxDownloadButton({ result }: XlsxDownloadButtonProps) {
       setExporting(true);
       setExportFailed(false);
       try {
-         await downloadFlatResult(result);
+         await downloadFlatResult(result, name);
       } catch (error) {
          console.error("XLSX export failed:", error);
          setExportFailed(true);
@@ -47,7 +53,7 @@ export function XlsxDownloadButton({ result }: XlsxDownloadButtonProps) {
                <span>
                   <IconButton
                      aria-label="Download Excel (.xlsx)"
-                     disabled={exporting}
+                     disabled={exporting || disabled}
                      onClick={download}
                      size="small"
                      sx={{

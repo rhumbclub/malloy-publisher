@@ -3,9 +3,21 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import writeXlsxFile, {
+   type Cell,
+   type SheetData,
+} from "write-excel-file/node";
 import { z } from "zod";
-import { getMaxResponseBytes, getQueryTimeoutMs } from "./config";
-import { InvalidArgumentError, NotQueryableError } from "./errors";
+import {
+   getMaxQueryRows,
+   getMaxResponseBytes,
+   getQueryTimeoutMs,
+} from "./config";
+import {
+   InvalidArgumentError,
+   NotQueryableError,
+   PayloadTooLargeError,
+} from "./errors";
 import { bigIntReplacer } from "./json_utils";
 import { tryAcquireQuerySlot } from "./query_concurrency";
 import { runWithQueryTimeout } from "./query_timeout";
@@ -13,6 +25,7 @@ import { stringifyQueryResponse } from "./service/model_limits";
 import type { Package } from "./service/package";
 
 const PAGE_SIZE = 100;
+const EXCEL_DATA_ROW_LIMIT = 1_048_575;
 const MANIFEST = "comparison-reports.json";
 const filterName = z.enum([
    "start",
@@ -61,6 +74,7 @@ const inputSchema = z
       cursor: z.string().max(16).optional(),
    })
    .strict();
+const exportInputSchema = inputSchema.omit({ cursor: true });
 
 type Manifest = z.infer<typeof manifestSchema>;
 type Report = z.infer<typeof reportSchema>;
@@ -208,6 +222,8 @@ function buildSQL(
    template: string,
    filters: ReturnType<typeof normalizeFilters>,
    snippets: Record<string, string> = {},
+   limit = PAGE_SIZE,
+   offset = (filters.page - 1) * PAGE_SIZE,
 ) {
    const values = {
       START: filters.start,
@@ -216,8 +232,8 @@ function buildSQL(
       MEMBER: filters.member,
       VARIANT: filters.variant,
       TYPE: String(filters.transactionType),
-      LIMIT: String(PAGE_SIZE),
-      OFFSET: String((filters.page - 1) * PAGE_SIZE),
+      LIMIT: String(limit),
+      OFFSET: String(offset),
    };
    let sql = template;
    for (const [name, value] of Object.entries(snippets)) {
@@ -232,6 +248,116 @@ function buildSQL(
       );
    }
    return sql;
+}
+
+const excelRowOnlyFreeze = {
+   files: {
+      transform: {
+         "xl/worksheets/sheet{id}.xml": {
+            transform: (xml: string) =>
+               xml.replace(
+                  '<pane ySplit="1" xSplit="0" topLeftCell="A2" activePane="bottomRight" state="frozen"/>',
+                  '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>',
+               ),
+         },
+      },
+   },
+};
+
+function publicRow(row: Record<string, unknown>): Record<string, unknown> {
+   return Object.fromEntries(
+      Object.entries(row).filter(([column]) => !column.startsWith("_")),
+   );
+}
+
+function excelCell(value: unknown): Cell {
+   if (typeof value === "bigint")
+      return Number.isSafeInteger(Number(value))
+         ? Number(value)
+         : String(value);
+   if (
+      value === null ||
+      value === undefined ||
+      value instanceof Date ||
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean"
+   )
+      return value;
+   if (Buffer.isBuffer(value)) return value.toString("base64");
+   return JSON.stringify(value, bigIntReplacer);
+}
+
+export async function exportComparisonReportXlsx(
+   pkg: Package,
+   slug: string,
+   input: unknown,
+) {
+   const manifest = await loadManifest(pkg);
+   const report = manifest.reports.find((candidate) => candidate.slug === slug);
+   if (!report)
+      throw new NotQueryableError(`Comparison report '${slug}' was not found.`);
+   const filters = normalizeFilters(
+      report,
+      exportInputSchema.parse(input ?? {}),
+   );
+   const maxRows = getMaxQueryRows();
+   const limit = Math.min(
+      maxRows > 0 ? maxRows + 1 : EXCEL_DATA_ROW_LIMIT + 1,
+      EXCEL_DATA_ROW_LIMIT + 1,
+   );
+   const template = await fs.readFile(packageFile(pkg, report.sql), "utf8");
+   const slot = tryAcquireQuerySlot("comparison-report-xlsx");
+   try {
+      const connection = await pkg.getMalloyConnection(manifest.connection);
+      const result = await runWithQueryTimeout(
+         (abortSignal) =>
+            connection.runSQL(
+               buildSQL(template, filters, manifest.snippets, limit, 0),
+               { rowLimit: limit, abortSignal },
+            ),
+         getQueryTimeoutMs(),
+      );
+      const totalRows = Number(
+         result.rows[0]?._total_rows ?? result.totalRows ?? result.rows.length,
+      );
+      if (
+         (maxRows > 0 &&
+            (totalRows > maxRows || result.rows.length > maxRows)) ||
+         totalRows > EXCEL_DATA_ROW_LIMIT ||
+         result.rows.length > EXCEL_DATA_ROW_LIMIT
+      ) {
+         throw new PayloadTooLargeError(
+            `Comparison report export exceeds the ${Math.min(maxRows || EXCEL_DATA_ROW_LIMIT, EXCEL_DATA_ROW_LIMIT)} row limit. Refine the filters.`,
+         );
+      }
+      const rows = result.rows.map((row) => publicRow({ ...row }));
+      if (rows.length === 0)
+         throw new InvalidArgumentError("The report has no rows to export.");
+      const columns = Object.keys(rows[0]);
+      const sheet: SheetData = [
+         columns.map((column) => ({ value: column, fontWeight: "bold" })),
+         ...rows.map((row) => columns.map((column) => excelCell(row[column]))),
+      ];
+      const buffer = await writeXlsxFile(
+         sheet,
+         {
+            sheet: "Data",
+            stickyRowsCount: 1,
+            dateFormat: "yyyy-mm-dd",
+         },
+         { features: [excelRowOnlyFreeze] },
+      ).toBuffer();
+      const maxBytes = getMaxResponseBytes();
+      if (maxBytes > 0 && buffer.byteLength > maxBytes) {
+         throw new PayloadTooLargeError(
+            `Comparison report workbook exceeds the ${maxBytes} byte response limit. Refine the filters.`,
+         );
+      }
+      return { buffer, rows: rows.length };
+   } finally {
+      slot.release();
+   }
 }
 
 function lineage(privacyProfile: string) {

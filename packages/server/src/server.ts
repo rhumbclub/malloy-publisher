@@ -95,6 +95,7 @@ import {
    rateLimitMiddleware,
 } from "./rate_limit";
 import {
+   exportComparisonReportXlsx,
    getComparisonCatalog,
    runComparisonReport,
 } from "./comparison_reports";
@@ -970,6 +971,35 @@ app.post(
             req.body,
          );
          res.type("application/json").send(result.serialized);
+      } catch (error) {
+         const { json, status } = internalErrorToHttpError(error as Error);
+         res.status(status).json(json);
+      }
+   },
+);
+
+app.post(
+   `${API_PREFIX}/environments/:environmentName/packages/:packageName/comparison-reports/:reportName/xlsx`,
+   async (req, res) => {
+      try {
+         const environment = await environmentStore.getEnvironment(
+            req.params.environmentName,
+            false,
+         );
+         const pkg = await environment.getPackage(
+            req.params.packageName,
+            false,
+         );
+         const { buffer } = await exportComparisonReportXlsx(
+            pkg,
+            req.params.reportName,
+            req.body,
+         );
+         res.type(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+         )
+            .attachment(`${req.params.reportName}.xlsx`)
+            .send(buffer);
       } catch (error) {
          const { json, status } = internalErrorToHttpError(error as Error);
          res.status(status).json(json);
