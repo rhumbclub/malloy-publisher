@@ -3,7 +3,12 @@
 
 import { describe, expect, test } from "bun:test";
 import type * as Malloy from "@malloydata/malloy-interfaces";
-import { flatResultSheet, isFlatResult } from "./xlsxExport";
+import {
+   flatResultSheet,
+   isFlatResult,
+   isTableResult,
+   xlsxFilename,
+} from "./xlsxExport";
 
 const flatResult: Malloy.Result = {
    connection_name: "duckdb",
@@ -50,6 +55,34 @@ const flatResult: Malloy.Result = {
 };
 
 describe("flat XLSX export", () => {
+   test("builds a normalized semantic filename with the local date", () => {
+      expect(
+         xlsxFilename("  Café Revenue / By Harbor ", new Date(2026, 7, 29)),
+      ).toBe("cafe-revenue-by-harbor-2026-08-29.xlsx");
+   });
+
+   test("exports flat table renderings but not other renderer types", () => {
+      expect(isTableResult(flatResult)).toBe(true);
+      expect(
+         isTableResult({
+            ...flatResult,
+            annotations: [{ value: "# transpose" }],
+         } as Malloy.Result),
+      ).toBe(true);
+      expect(
+         isTableResult({
+            ...flatResult,
+            source_annotations: [{ value: "# bar_chart" }],
+         } as Malloy.Result),
+      ).toBe(false);
+      expect(
+         isTableResult({
+            ...flatResult,
+            model_annotations: [{ value: "# dashboard" }],
+         } as Malloy.Result),
+      ).toBe(false);
+   });
+
    test("preserves schema order and spreadsheet-safe scalar values", () => {
       expect(isFlatResult(flatResult)).toBe(true);
       expect(flatResultSheet(flatResult)).toEqual([

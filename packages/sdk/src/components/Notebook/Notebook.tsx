@@ -21,6 +21,7 @@ import { Loading } from "../Loading";
 import { useServer } from "../ServerProvider";
 import { CleanNotebookContainer, CleanNotebookSection } from "../styles";
 import { NotebookCell } from "./NotebookCell";
+import { notebookTableExports } from "./exportNames";
 import { EnhancedNotebookCell } from "./types";
 
 // Maximum number of concurrent cell executions to avoid overwhelming the server
@@ -618,6 +619,18 @@ export default function Notebook({
       executeCells,
    ]);
 
+   const visibleCells = useMemo(
+      () =>
+         (enhancedCells.length > 0
+            ? enhancedCells
+            : notebook?.notebookCells || []) as EnhancedNotebookCell[],
+      [enhancedCells, notebook?.notebookCells],
+   );
+   const tableExports = useMemo(
+      () => notebookTableExports(visibleCells, notebookPath),
+      [visibleCells, notebookPath],
+   );
+
    return (
       <CleanNotebookContainer>
          <CleanNotebookSection>
@@ -641,10 +654,7 @@ export default function Notebook({
 
                {/* Notebook Cells */}
                {isSuccess &&
-                  (enhancedCells.length > 0
-                     ? enhancedCells
-                     : notebook?.notebookCells || []
-                  ).map((cell, index) => (
+                  visibleCells.map((cell, index) => (
                      <NotebookCell
                         cell={cell as EnhancedNotebookCell}
                         key={index}
@@ -657,6 +667,7 @@ export default function Notebook({
                         // showed nothing on a re-run, which is the only case
                         // the settle window has to signal.
                         pendingRerun={runScheduled}
+                        xlsxExport={tableExports[index]}
                         onNavigate={onNavigate}
                         onDrillNavigate={onDrillNavigate}
                         onDrillSelf={

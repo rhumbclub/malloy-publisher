@@ -148,7 +148,13 @@ test.describe("package-models", () => {
       const downloadPromise = page.waitForEvent("download");
       await excel.click();
       const download = await downloadPromise;
-      expect(download.suggestedFilename()).toBe("malloy.xlsx");
+      const now = new Date();
+      const localDate = [
+         now.getFullYear(),
+         String(now.getMonth() + 1).padStart(2, "0"),
+         String(now.getDate()).padStart(2, "0"),
+      ].join("-");
+      expect(download.suggestedFilename()).toBe(`customers-${localDate}.xlsx`);
       const downloadPath = await download.path();
       expect(downloadPath).not.toBeNull();
       const workbook = await readFile(downloadPath!);

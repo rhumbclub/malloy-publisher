@@ -2,9 +2,28 @@
 // SPDX-License-Identifier: MIT
 
 import type * as Malloy from "@malloydata/malloy-interfaces";
+import { parseAnnotation } from "@malloydata/malloy-tag";
 import type { Cell as XlsxCell, SheetData } from "write-excel-file/browser";
 
-export const XLSX_FILE_NAME = "malloy.xlsx";
+const nonTableRenderers = [
+   "bar_chart",
+   "big_value",
+   "dashboard",
+   "image",
+   "json",
+   "line_chart",
+   "list",
+   "list_detail",
+   "point_map",
+   "scatter_chart",
+   "segment_map",
+   "shape_map",
+   "sparkline",
+   "sparkline_area",
+   "sparkline_bar",
+   "sparkline_column",
+   "url",
+];
 
 const excelRowOnlyFreeze = {
    files: {
@@ -52,6 +71,48 @@ export function isFlatResult(result: Malloy.Result): boolean {
          row.record_value.length === fields.length &&
          row.record_value.every((cell) => scalarCellKinds.has(cell.kind)),
    );
+}
+
+export function normalizeExportName(value: string): string {
+   return (
+      value
+         .normalize("NFKD")
+         .replace(/\p{Mark}/gu, "")
+         .toLocaleLowerCase()
+         .replace(/[^\p{Letter}\p{Number}]+/gu, "-")
+         .replace(/^-|-$/g, "") || "export"
+   );
+}
+
+export function xlsxFilename(name: string, date = new Date()): string {
+   const localDate = [
+      date.getFullYear(),
+      String(date.getMonth() + 1).padStart(2, "0"),
+      String(date.getDate()).padStart(2, "0"),
+   ].join("-");
+   return `${normalizeExportName(name)}-${localDate}.xlsx`;
+}
+
+export function isTableResult(result: Malloy.Result): boolean {
+   if (!isFlatResult(result)) return false;
+   const annotated = result as Malloy.Result & {
+      annotations?: Array<{ value?: string }>;
+      model_annotations?: Array<{ value?: string }>;
+      source_annotations?: Array<{ value?: string }>;
+   };
+   const lines = [
+      ...(annotated.model_annotations ?? []),
+      ...(annotated.source_annotations ?? []),
+      ...(annotated.annotations ?? []),
+   ]
+      .map((annotation) => annotation.value)
+      .filter((value): value is string => typeof value === "string");
+   try {
+      const tag = parseAnnotation(lines).tag;
+      return !nonTableRenderers.some((renderer) => tag.has(renderer));
+   } catch {
+      return false;
+   }
 }
 
 function excelDate(value: string): Date | string {
@@ -111,7 +172,10 @@ export function flatResultSheet(result: Malloy.Result): SheetData {
    return rows;
 }
 
-export async function downloadFlatResult(result: Malloy.Result): Promise<void> {
+export async function downloadFlatResult(
+   result: Malloy.Result,
+   name: string,
+): Promise<void> {
    const { default: writeXlsxFile } = await import("write-excel-file/browser");
    await writeXlsxFile(
       flatResultSheet(result),
@@ -123,5 +187,5 @@ export async function downloadFlatResult(result: Malloy.Result): Promise<void> {
       {
          features: [excelRowOnlyFreeze],
       },
-   ).toFile(XLSX_FILE_NAME);
+   ).toFile(xlsxFilename(name));
 }

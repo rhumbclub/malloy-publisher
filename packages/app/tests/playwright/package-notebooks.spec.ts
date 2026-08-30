@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 import { expect, test } from "@playwright/test";
+import { strFromU8, unzipSync } from "fflate";
+import { readFile } from "node:fs/promises";
 import { DEFAULT_ENV, PACKAGES } from "./helpers/fixtures";
 import { gotoHome, openEnvironment, openPackage } from "./helpers/navigation";
 
@@ -59,6 +61,37 @@ test.describe("package-notebooks", () => {
             level: 1,
          }),
       ).toBeVisible();
+   });
+
+   test("flat table cells download with notebook headings and table numbers", async ({
+      page,
+   }) => {
+      await page.goto(
+         `/${DEFAULT_ENV}/${PACKAGES.storefront}/storefront.malloynb`,
+      );
+      const excel = page.getByRole("button", {
+         name: "Download Excel (.xlsx)",
+      });
+      await expect(excel).toHaveCount(2);
+
+      const downloadPromise = page.waitForEvent("download");
+      await excel.first().click();
+      const download = await downloadPromise;
+      const now = new Date();
+      const localDate = [
+         now.getFullYear(),
+         String(now.getMonth() + 1).padStart(2, "0"),
+         String(now.getDate()).padStart(2, "0"),
+      ].join("-");
+      expect(download.suggestedFilename()).toBe(
+         `storefront-a-guided-tour-top-products-and-customers-table-1-${localDate}.xlsx`,
+      );
+      const workbook = await readFile((await download.path())!);
+      expect(
+         strFromU8(unzipSync(workbook)["xl/worksheets/sheet1.xml"]),
+      ).toContain(
+         '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>',
+      );
    });
 
    test("clicking a notebook row keeps the package segment in the URL", async ({

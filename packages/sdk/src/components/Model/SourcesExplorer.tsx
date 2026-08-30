@@ -397,7 +397,10 @@ function SourceExplorerComponentInner({
                />
             </div>
          </MalloyExplorerProvider>
-         <XlsxDownloadButton result={submittedQuery?.response?.result} />
+         <XlsxDownloadButton
+            result={submittedQuery?.response?.result}
+            name={sourceAndPath.sourceInfo.name}
+         />
       </StyledExplorerContent>
    );
 }

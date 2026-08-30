@@ -25,6 +25,7 @@ import { usePublisherTheme } from "../../theme/ThemeContext";
 import { parseResourceUri } from "../../utils/formatting";
 import { highlight } from "../highlighter";
 import { ModelExplorerDialog } from "../Model/ModelExplorerDialog";
+import { XlsxDownloadButton } from "../Model/XlsxDownloadButton";
 import type { NavigationClick } from "../click_helper";
 import { useDrill, type DrillNavigation } from "../drill";
 import { createEmbeddedQueryResult } from "../QueryResult/QueryResult";
@@ -32,6 +33,7 @@ import ResultContainer from "../RenderedResult/ResultContainer";
 import ResultsDialog from "../ResultsDialog";
 import { CleanMetricCard, CleanNotebookCell } from "../styles";
 import { EnhancedNotebookCell } from "./types";
+import type { NotebookTableExport } from "./exportNames";
 
 /**
  * Cap for a cell result that lays itself out: a table, mostly. Tall enough for
@@ -58,6 +60,7 @@ interface NotebookCellProps {
     * signal: the values on screen are already stale.
     */
    pendingRerun?: boolean;
+   xlsxExport?: NotebookTableExport;
    // Takes the modifier subset rather than a synthetic event, so a drill click
    // (which the Malloy renderer reports as a DOM event) can navigate without
    // being converted into a React one first.
@@ -174,6 +177,7 @@ export function NotebookCell({
    maxResultSize,
    isExecuting,
    pendingRerun,
+   xlsxExport,
    onNavigate,
    onDrillSelf,
    canDrillSelf,
@@ -697,6 +701,13 @@ export function NotebookCell({
                         zIndex: 2,
                      }}
                   >
+                     {xlsxExport && (
+                        <XlsxDownloadButton
+                           result={xlsxExport.result}
+                           name={xlsxExport.name}
+                           disabled={isExecuting || pendingRerun}
+                        />
+                     )}
                      {!hideCodeCellIcon && (
                         <IconButton
                            sx={{
