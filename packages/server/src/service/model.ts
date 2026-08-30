@@ -4184,6 +4184,8 @@ export class Model {
        * before forwarding it.
        */
       bypassAuthorize = false,
+      /** Override the silent default only for a trusted result-artifact caller. */
+      defaultQueryRowLimit?: number,
    ): Promise<{
       result: Malloy.Result;
       /**
@@ -4802,7 +4804,7 @@ export class Model {
          const preparedLimit = preparedResult.resultExplore.limit;
          rowLimitSource = queryRowLimitSource(preparedLimit);
          rowLimit = resolveModelQueryRowLimit(preparedLimit, {
-            defaultLimit: getDefaultQueryRowLimit(),
+            defaultLimit: defaultQueryRowLimit ?? getDefaultQueryRowLimit(),
             maxRows,
          });
          appliedQueryMetadata = this.resolveQueryMetadata(
@@ -4999,7 +5001,7 @@ export class Model {
             const livePreparedLimit = livePrepared.resultExplore.limit;
             rowLimitSource = queryRowLimitSource(livePreparedLimit);
             rowLimit = resolveModelQueryRowLimit(livePreparedLimit, {
-               defaultLimit: getDefaultQueryRowLimit(),
+               defaultLimit: defaultQueryRowLimit ?? getDefaultQueryRowLimit(),
                maxRows,
             });
             // Re-resolve rather than reuse: the bag above was resolved against

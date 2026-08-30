@@ -30,6 +30,11 @@ import { mintCorrelationId } from "../../service/query_metadata";
 import { bigIntReplacer } from "../../json_utils";
 import { MCP_ERROR_MESSAGES } from "../mcp_constants";
 import { hasComparisonReports } from "../../comparison_reports";
+import {
+   MCP_PREVIEW_ROWS,
+   persistQueryArtifact,
+   queryArtifactContext,
+} from "../query_artifact";
 
 /**
  * Malloy's two ways of saying a name is not in the model's namespace: a bare
@@ -110,6 +115,8 @@ function executeQueryDescription(): string {
 ## Response
 
 - rows: flat objects; _meta: schema, annotations, connection, and timezone.
+- _request_id and _result_url: durable query identity and authenticated complete JSON result. Inline rows are a preview capped at ${MCP_PREVIEW_ROWS.toLocaleString("en-US")} when these fields are present.
+- A client advertising the stable \`io.modelcontextprotocol/tasks\` extension may receive a durable task handle instead of waiting. Poll \`tasks/get\`; its completed result has this same response shape.
 - _query_row_limit, _limit_source, _limit_hit: applied cap, its source, and whether the silent default was reached.
 - _rows_truncated, _total_rows, _returned_rows: present only when the payload cap dropped rows.
 - _query_id, warning, renderLogErrors: present only when applicable.
@@ -131,7 +138,7 @@ export function registerExecuteQueryTool(
       executeQueryDescription(),
       executeQueryShape,
       /** Handles requests for the malloy_executeQuery tool */
-      async (params) => {
+      async (params, extra) => {
          // Destructure environmentName as well
          const {
             environmentName,
@@ -143,6 +150,7 @@ export function registerExecuteQueryTool(
             filterParams,
             givens,
          } = params;
+         const artifact = queryArtifactContext(extra?.requestInfo?.headers);
 
          const hasAdhocQuery = !!query;
          const hasNamedQuery = !!queryName;
@@ -277,6 +285,10 @@ export function registerExecuteQueryTool(
                           // a wrapped result measuring over the cap was a 413 for
                           // a payload that would have arrived at 90k characters.
                           "compact",
+                          false,
+                          artifact && getMaxQueryRows() > 0
+                             ? getMaxQueryRows() + 1
+                             : undefined,
                        )
                      : model.getQueryResults(
                           sourceName,
@@ -288,6 +300,10 @@ export function registerExecuteQueryTool(
                           abortSignal,
                           queryMetadataInput,
                           "compact",
+                          false,
+                          artifact && getMaxQueryRows() > 0
+                             ? getMaxQueryRows() + 1
+                             : undefined,
                        ),
                getQueryTimeoutMs(),
             );
@@ -312,15 +328,36 @@ export function registerExecuteQueryTool(
                "result",
             );
 
+            const renderErrors = renderLogs.map((log) => log.message);
+            const artifactMetadata = artifact
+               ? await persistQueryArtifact(
+                    artifact,
+                    buildQueryEnvelope(
+                       compactResult,
+                       rowLimit,
+                       result,
+                       renderErrors,
+                       0,
+                       rowLimitSource,
+                       queryCorrelationId,
+                       getMaxQueryRows(),
+                    ),
+                 )
+               : undefined;
+            const preview =
+               artifact && Array.isArray(compactResult)
+                  ? compactResult.slice(0, MCP_PREVIEW_ROWS)
+                  : compactResult;
             const envelope = buildQueryEnvelope(
-               compactResult,
+               preview,
                rowLimit,
                result,
-               renderLogs.map((log) => log.message),
+               renderErrors,
                undefined,
                rowLimitSource,
                queryCorrelationId,
                getMaxQueryRows(),
+               artifactMetadata,
             );
 
             // A capped or truncated result, and a broken render tag, are the

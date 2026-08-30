@@ -11,6 +11,7 @@ import { logger } from "../../logger";
 import { EnvironmentStore } from "../../service/environment_store";
 import { buildMalloyUri, classifyToolError } from "../handler_utils";
 import { jsonResource, jsonToolError } from "../tool_response";
+import { persistQueryArtifact, queryArtifactContext } from "../query_artifact";
 
 const filters = z
    .object({
@@ -43,7 +44,7 @@ const shape = {
    filters,
 };
 
-const DESCRIPTION = `List or run fixed reports that exist only to compare with the Bluelake Software ERP UI. Omit reportName to list them. The response warning is mandatory context: these reports can preserve known incorrect calculations and dimension handling, so never use them for analysis or decisions. Use the governed package through malloy_getContext and malloy_executeQuery for current metrics.`;
+const DESCRIPTION = `List or run fixed reports that exist only to compare with the Bluelake Software ERP UI. Omit reportName to list them. The response warning is mandatory context: these reports can preserve known incorrect calculations and dimension handling, so never use them for analysis or decisions. Use the governed package through malloy_getContext and malloy_executeQuery for current metrics. A report run receives a durable qr_ request ID and authenticated complete JSON result URL; clients advertising io.modelcontextprotocol/tasks may poll tasks/get instead of waiting.`;
 
 export function registerComparisonReportTool(
    mcpServer: McpServer,
@@ -53,7 +54,7 @@ export function registerComparisonReportTool(
       "malloy_runComparisonReport",
       DESCRIPTION,
       shape,
-      async ({ environmentName, packageName, reportName, filters }) => {
+      async ({ environmentName, packageName, reportName, filters }, extra) => {
          const uri = buildMalloyUri(
             { environment: environmentName, package: packageName },
             reportName
@@ -70,7 +71,11 @@ export function registerComparisonReportTool(
                return jsonResource(uri, await getComparisonCatalog(pkg));
             }
             const result = await runComparisonReport(pkg, reportName, filters);
-            return jsonResource(uri, result.payload);
+            const artifact = queryArtifactContext(extra?.requestInfo?.headers);
+            const metadata = artifact
+               ? await persistQueryArtifact(artifact, result.payload)
+               : undefined;
+            return jsonResource(uri, { ...result.payload, ...metadata });
          } catch (error) {
             logger.warn("[MCP Tool comparisonReport] report failed", {
                environmentName,

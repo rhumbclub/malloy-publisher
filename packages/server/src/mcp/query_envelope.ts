@@ -5,6 +5,7 @@ import type * as Malloy from "@malloydata/malloy-interfaces";
 import { bigIntReplacer } from "../json_utils";
 import { DEFAULT_MAX_QUERY_ROWS } from "../constants";
 import type { QueryRowLimitSource } from "../service/model_limits";
+import type { QueryArtifactMetadata } from "./query_artifact";
 
 /**
  * The agent-facing shape for a query result, matched to what Credible's
@@ -79,6 +80,11 @@ export interface QueryEnvelope {
    _query_id?: string;
    warning?: string;
    renderLogErrors?: string[];
+   _request_id?: string;
+   _result_url?: string;
+   _result_rows?: number;
+   _preview_row_limit?: number;
+   _preview_truncated?: boolean;
 }
 
 /**
@@ -111,6 +117,7 @@ export function buildQueryEnvelope(
    rowLimitSource: QueryRowLimitSource = "server_default",
    queryCorrelationId: string | null = null,
    maxRows = DEFAULT_MAX_QUERY_ROWS,
+   artifact?: QueryArtifactMetadata,
 ): QueryEnvelope {
    const rowCount = Array.isArray(rows) ? rows.length : 0;
    // Equality, not >=: the cap is pushed into the SQL, so the database cannot
@@ -148,6 +155,7 @@ export function buildQueryEnvelope(
       _limit_hit: limitHit,
       ...(queryCorrelationId !== null && { _query_id: queryCorrelationId }),
       ...(renderLogErrors.length > 0 && { renderLogErrors }),
+      ...artifact,
    };
 
    if (limitHit) {
@@ -163,7 +171,7 @@ export function buildQueryEnvelope(
          "Aggregate or filter if the complete result would exceed the maximum.";
    }
 
-   return fitToBudget(envelope, limit);
+   return limit > 0 ? fitToBudget(envelope, limit) : envelope;
 }
 
 /**
