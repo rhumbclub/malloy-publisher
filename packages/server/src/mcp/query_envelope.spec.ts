@@ -63,6 +63,15 @@ describe("buildQueryEnvelope", () => {
          expect(e._limit_hit).toBe(true);
          expect(e._query_row_limit).toBe(1000);
          expect(e.warning).toContain("not a complete result");
+         expect(e.warning).toContain("1,000-row server default");
+         expect(e.warning).toContain("hard maximum is 100,000");
+         expect(e.warning).toContain(
+            "run: source_name -> { select: *; limit: 5000 }",
+         );
+         expect(e.warning).toContain(
+            "run: source_name -> view_name + { limit: 5000 }",
+         );
+         expect(e.warning).toContain("never in `queryName`");
       });
 
       it("is false when the result came in under the cap", () => {

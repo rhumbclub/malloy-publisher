@@ -139,6 +139,22 @@ describe("MCP server over the MCP protocol (in-memory)", () => {
       }
    });
 
+   it("teaches callers how to override the default query row limit", async () => {
+      const { tools } = await client.listTools();
+      const description = tools.find(
+         (tool) => tool.name === "malloy_executeQuery",
+      )?.description;
+      expect(description).toContain("1,000-row default");
+      expect(description).toContain("100,000");
+      expect(description).toContain(
+         "run: source_name -> { select: *; limit: 5000 }",
+      );
+      expect(description).toContain(
+         "run: source_name -> view_name + { limit: 5000 }",
+      );
+      expect(description).toContain("never `queryName`");
+   });
+
    it("exposes the skill set as dual-channel prompts", async () => {
       const { prompts } = await client.listPrompts();
       expect(prompts.length).toBeGreaterThanOrEqual(24);

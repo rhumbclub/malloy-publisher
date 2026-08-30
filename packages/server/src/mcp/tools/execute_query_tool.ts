@@ -5,7 +5,11 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type { GivenValue } from "@malloydata/malloy";
-import { getQueryTimeoutMs } from "../../config";
+import {
+   getDefaultQueryRowLimit,
+   getMaxQueryRows,
+   getQueryTimeoutMs,
+} from "../../config";
 import { logger } from "../../logger";
 import {
    tryAcquireQuerySlot,
@@ -69,7 +73,7 @@ const executeQueryShape = {
       .string()
       .optional()
       .describe(
-         "Named query or view. A NAME, not Malloy code, on the same terms as sourceName: one view name as malloy_getContext returned it. A dotted path (carriers.by_name), a refinement (by_carrier + { limit: 10 }), or anything containing a newline goes in query instead.",
+         "Named query or view. A NAME, not Malloy code, on the same terms as sourceName. To refine a view, put the full statement in query, never queryName: run: source_name -> view_name + { limit: 5000 }.",
       ),
    filterParams: z
       .record(z.union([z.string(), z.array(z.string())]))
@@ -85,27 +89,33 @@ const executeQueryShape = {
       ),
 };
 
-const EXECUTE_QUERY_DESCRIPTION = `Run a Malloy query against a model and return the rows. Takes either ad-hoc Malloy in query, or a named view/query via queryName (with sourceName for a view).
+function executeQueryDescription(): string {
+   const defaultRows = getDefaultQueryRowLimit().toLocaleString("en-US");
+   const maxRows = getMaxQueryRows();
+   const maximum =
+      maxRows > 0
+         ? `The hard maximum is ${maxRows.toLocaleString("en-US")} rows.`
+         : "No hard maximum is configured.";
+   return `Run a Malloy query and return flat JSON rows. Send either Malloy in query or one named view/query in queryName (plus sourceName for a view).
 
 ## Contract rules
-- Check _limit_hit before reporting any total, count, or "top N". True means the server's default cap cut the result off and more rows exist, so what came back is a partial set, not the answer.
-- Never sum or count the returned rows to state a total when _limit_hit or _rows_truncated is set. Aggregate in the query instead.
-- _returned_rows: 0 with _rows_truncated set means one row was too large to send, NOT that nothing matched. Do not report it as an empty result.
-- Use source, view, and field names exactly as malloy_getContext returned them. sourceName/queryName take one NAME each, never Malloy code — they are quoted for you, so send even a hyphenated name bare, and put anything richer (a dotted path, a refinement, a second statement) in query.
+- Without a query-authored limit:/top:, the server applies a ${defaultRows}-row default. Exactly ${defaultRows} rows sets _limit_hit=true: the result is incomplete.
+- To set a larger bound, send Malloy in query: \`run: source_name -> { select: *; limit: 5000 }\`. For a named view: \`run: source_name -> view_name + { limit: 5000 }\`; put the entire refinement in \`query\`, never \`queryName\`.
+- ${maximum} A query above it fails; filter or aggregate instead.
+- Never calculate a total from returned rows when _limit_hit or _rows_truncated is set. Aggregate in the query.
+- _returned_rows=0 with _rows_truncated means a row was too large, not that nothing matched.
+- Use names exactly as malloy_getContext returned them. sourceName/queryName accept one name each; put richer Malloy in query.
 - query is RESTRICTED: no raw SQL/import/##! (see its param doc).
 
 ## Response
-A JSON object, the same shape Credible's execute_query and an in-package data app receive:
-- rows: flat objects keyed by column name.
-- _meta: the Malloy metadata flat rows drop (schema with field types and render tags, annotations, connection_name, query_timezone).
-- _query_row_limit: the cap pushed into the SQL, from the query's own limit: or the server default.
-- _limit_source: "query" when the cap came from the query's own limit:/top:, "server_default" otherwise.
-- _limit_hit: the row count equals that cap AND the cap was the server default, so a query carrying its own limit:/top: never sets it and exactly that many rows is a complete answer.
-- _rows_truncated / _total_rows / _returned_rows: present only when the payload cap dropped rows.
-- _query_id: this query's id in the warehouse's own query history. Present only where enabled.
-- warning, renderLogErrors: present only when they apply.
 
-Values above 2^53 are returned as JSON strings so their digits survive.`;
+- rows: flat objects; _meta: schema, annotations, connection, and timezone.
+- _query_row_limit, _limit_source, _limit_hit: applied cap, its source, and whether the silent default was reached.
+- _rows_truncated, _total_rows, _returned_rows: present only when the payload cap dropped rows.
+- _query_id, warning, renderLogErrors: present only when applicable.
+
+Values above 2^53 become JSON strings so their digits survive.`;
+}
 
 // Type inference is handled automatically by the MCP server based on the executeQueryShape
 
@@ -118,7 +128,7 @@ export function registerExecuteQueryTool(
 ): void {
    mcpServer.tool(
       "malloy_executeQuery",
-      EXECUTE_QUERY_DESCRIPTION,
+      executeQueryDescription(),
       executeQueryShape,
       /** Handles requests for the malloy_executeQuery tool */
       async (params) => {
@@ -310,6 +320,7 @@ export function registerExecuteQueryTool(
                undefined,
                rowLimitSource,
                queryCorrelationId,
+               getMaxQueryRows(),
             );
 
             // A capped or truncated result, and a broken render tag, are the

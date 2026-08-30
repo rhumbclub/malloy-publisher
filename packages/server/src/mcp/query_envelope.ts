@@ -3,6 +3,7 @@
 
 import type * as Malloy from "@malloydata/malloy-interfaces";
 import { bigIntReplacer } from "../json_utils";
+import { DEFAULT_MAX_QUERY_ROWS } from "../constants";
 import type { QueryRowLimitSource } from "../service/model_limits";
 
 /**
@@ -109,6 +110,7 @@ export function buildQueryEnvelope(
    limit = MAX_RESULT_CHARS,
    rowLimitSource: QueryRowLimitSource = "server_default",
    queryCorrelationId: string | null = null,
+   maxRows = DEFAULT_MAX_QUERY_ROWS,
 ): QueryEnvelope {
    const rowCount = Array.isArray(rows) ? rows.length : 0;
    // Equality, not >=: the cap is pushed into the SQL, so the database cannot
@@ -149,9 +151,16 @@ export function buildQueryEnvelope(
    };
 
    if (limitHit) {
+      const formattedLimit = rowLimit.toLocaleString("en-US");
+      const maximum =
+         maxRows > 0
+            ? `The hard maximum is ${maxRows.toLocaleString("en-US")} rows.`
+            : "There is no configured hard maximum.";
       envelope.warning =
-         `Returned exactly ${rowLimit} rows, the row limit applied to this query, so there are probably more. ` +
-         `This is not a complete result: add an explicit limit, aggregate, or filter rather than reporting these rows as the whole set.`;
+         `Returned exactly the ${formattedLimit}-row server default, so there are probably more. This is not a complete result. ${maximum} ` +
+         "To request more, send Malloy in `query`: `run: source_name -> { select: *; limit: 5000 }`. " +
+         "For a named view use `run: source_name -> view_name + { limit: 5000 }`; put the entire refinement in `query`, never in `queryName`. " +
+         "Aggregate or filter if the complete result would exceed the maximum.";
    }
 
    return fitToBudget(envelope, limit);
